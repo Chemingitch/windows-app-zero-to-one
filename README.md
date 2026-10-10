@@ -49,6 +49,21 @@ python scripts/sign_exe.py myapp.exe --name "Your Name"
 
 详见 `references/signing-and-smartscreen.md`。
 
+## 仿作模式（照着现有软件做一个）
+
+如果用户说"做一个像 XX 的软件 / 仿 XX"，先别照抄界面——按这份清单一次性问清功能边界：
+
+1. 参考的是哪个软件？最在意它的哪一点？
+2. **必做**的核心功能（逐条列出，圈定 MVP）
+3. 可以**砍掉 / 简化**的功能
+4. 目标形态（窗口 / 命令行）
+5. 有没有界面参考（截图 / 描述 / 配色）
+6. 数据从哪来？要不要兼容原软件的文件格式？
+7. 给谁用、要不要联网
+
+产出：功能清单（必做 / 可选 / 不做）+ 一句话定位，再进入选型。
+工具链装在 **`~/.windowsbuildtools`**（Windows 构建工具目录），构建/签名脚本自动读取；旧版 `~/.windows-zero-to-one` 也能被识别。
+
 ## 安装到 WorkBuddy
 
 把整个目录解压到 `~/.workbuddy/skills/windows-app-zero-to-one/`，刷新技能列表即可在对话中触发。

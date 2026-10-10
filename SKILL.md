@@ -1,6 +1,6 @@
 ---
 name: windows-app-zero-to-one
-description: 把一个模糊想法变成可分发的 Windows exe 程序的完整流程。This skill should be used when the user describes a desktop app idea and wants it actually built ("帮我做一个 Windows 小程序" / "我要一个能 XX 的 exe" / "把这个脚本做成 exe 发给别人")，或需要从零创建、打包、签名任意 Windows 可执行程序。覆盖需求澄清、技术选型（Go / .NET / Python）、骨架搭建、编码实现、命令行构建（无需 Visual Studio）、Authenticode 签名到交付的全过程。
+description: 把一个模糊想法变成可分发的 Windows exe 程序的完整流程。This skill should be used when the user describes a desktop app idea and wants it actually built ("帮我做一个 Windows 小程序" / "我要一个能 XX 的 exe" / "把这个脚本做成 exe 发给别人")，或需要从零创建、打包、签名任意 Windows 可执行程序。覆盖需求澄清、技术选型（Go / .NET / Python）、骨架搭建、编码实现、命令行构建（无需 Visual Studio）、Authenticode 签名到交付的全过程，也支持照着某个现有软件仿作一个（会主动追问功能清单，区分必做 / 可选 / 不做）。
 agent_created: true
 ---
 
@@ -31,6 +31,26 @@ agent_created: true
 
 产出：不超过 10 行的需求摘要，含"做什么 / 不做什么"。
 
+### 仿作模式 · 照着现有软件做一个
+
+当用户说"做一个像 XX 的软件 / 仿 XX / 照着 XX 做一个"时，**不要直接照抄 UI**——先问清楚功能边界。
+用一次性提问（或 AskUserQuestion）把功能拆成三档，防止无限发散：
+
+| 要追问的功能点 | 目的 |
+|---|---|
+| 参考的是哪个软件？你最在意它的哪一点？ | 抓住"灵魂"，别被表面界面带偏 |
+| **必做**的核心功能（逐条列出来） | 圈定 MVP，第一版只做这些 |
+| 可以**砍掉 / 简化**的功能 | 先做最小可用，后续再迭代 |
+| 目标形态（窗口 / 命令行） | 复用上面"形态询问" |
+| 有没有界面参考（截图 / 描述 / 配色） | 减少来回确认 |
+| 数据从哪来？要不要兼容原软件的文件格式？ | 决定本地存储 vs 联网、是否要解析旧格式 |
+| 给谁用、要不要联网 | 影响签名策略与杀软误报 |
+
+产出：一份「功能清单（必做 / 可选 / 不做）」+ 一句话定位，再进入阶段 1 选型。
+
+> 原则：仿作是"做出同等体验的最小实现"，不是逐像素复刻。先交一个能用的，再迭代。
+> 提问模板与"仿记事本"等示例见 `references/replicate-app.md`。
+
 ### 阶段 1 · 选型
 
 **要不要窗口是分水岭：**
@@ -47,7 +67,7 @@ agent_created: true
 - 要**真正的窗口程序**（按钮、表格、设置页）→ C#，别用 Go 硬凑 GUI
 - 已有 Python 脚本要变成 exe → PyInstaller，但注意杀软误报率高
 
-### 准备工具链（新机器一次性）
+### 准备工具链（新机器一次性）· Windows 构建工具（windowsbuildtools）
 
 目标机器上什么都没有时，先跑自动部署。**不需要 Visual Studio、不需要管理员权限**：
 
@@ -58,7 +78,9 @@ python scripts/setup_dev_chain.py --lang python        # 装 PyInstaller 到当�
 python scripts/setup_dev_chain.py --proxy http://127.0.0.1:7890
 ```
 
-装到 `~/.windows-zero-to-one`，写 `devchain.json`；之后 `build_exe.py` **自动读取，无需参数**。
+装到 **`~/.windowsbuildtools`**（即"Windows 构建工具"目录，简称 windowsbuildtools），写 `devchain.json`；
+之后 `build_exe.py` / `sign_exe.py` **自动读取，无需参数**。
+> 兼容：旧版装在 `~/.windows-zero-to-one` 的工具与证书也会被自动识别，无需迁移。
 
 ### 阶段 2 · 起骨架
 
@@ -130,4 +152,5 @@ python scripts/sign_exe.py dist/MyApp.exe --name "Your Name"
 - `references/build-options.md` — 各形态构建命令、体积、取舍
 - `references/signing-and-smartscreen.md` — 证书类型、SmartScreen 机制、杀软误报
 - `references/pitfalls.md` — 按卡壳时长排序的实战坑
+- `references/replicate-app.md` — 仿作模式：功能追问模板 + 示例
 - `assets/starter-go/`、`assets/starter-python/` — 最小可运行骨架

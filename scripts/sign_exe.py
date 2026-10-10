@@ -23,8 +23,25 @@ import secrets
 import subprocess
 import sys
 
-DEFAULT_ROOT = os.path.join(os.path.expanduser("~"), ".windows-zero-to-one")
+DEFAULT_ROOT = os.path.join(os.path.expanduser("~"), ".windowsbuildtools")
 TIMESTAMP_SERVER = "http://timestamp.digicert.com"
+
+
+def resolve_root(explicit):
+    """Pick the Windows build-tools root.
+
+    Priority: --dir > WINDOWS_TOOLS_ROOT env > legacy ~/.windows-zero-to-one
+    (if it already holds a certs/ folder) > new ~/.windowsbuildtools.
+    """
+    if explicit:
+        return os.path.abspath(explicit)
+    env = os.environ.get("WINDOWS_TOOLS_ROOT")
+    if env:
+        return os.path.abspath(env)
+    legacy = os.path.join(os.path.expanduser("~"), ".windows-zero-to-one")
+    if os.path.isdir(os.path.join(legacy, "certs")):
+        return legacy
+    return os.path.join(os.path.expanduser("~"), ".windowsbuildtools")
 
 
 def log(msg):
@@ -118,7 +135,7 @@ def main():
     exe = os.path.abspath(args.exe)
     if not os.path.isfile(exe):
         fail("no such file: %s" % exe)
-    root = os.path.abspath(args.dir or os.environ.get("WINDOWS_TOOLS_ROOT") or DEFAULT_ROOT)
+    root = resolve_root(args.dir)
     name = args.name or os.environ.get("USERNAME") or os.environ.get("USER") or "exe-builder"
 
     log("=" * 58)

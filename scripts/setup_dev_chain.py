@@ -28,7 +28,7 @@ GO_DL = "https://dl.google.com/go/%s.windows-amd64.zip"
 DOTNET_INSTALL = "https://dot.net/v1/dotnet-install.ps1"
 DOTNET_CHANNEL = "8.0"
 
-DEFAULT_ROOT = os.path.join(os.path.expanduser("~"), ".windows-zero-to-one")
+DEFAULT_ROOT = os.path.join(os.path.expanduser("~"), ".windowsbuildtools")
 
 
 def log(msg):
@@ -159,12 +159,16 @@ def main():
         return
 
     cfg = {}
-    if os.path.isfile(os.path.join(root, "devchain.json")):
-        try:
-            with open(os.path.join(root, "devchain.json"), encoding="utf-8") as f:
-                cfg = json.load(f)
-        except Exception:
-            cfg = {}
+    legacy = os.path.join(os.path.expanduser("~"), ".windows-zero-to-one")
+    for cand in (os.path.join(root, "devchain.json"),
+                os.path.join(legacy, "devchain.json")):
+        if os.path.isfile(cand):
+            try:
+                with open(cand, encoding="utf-8") as f:
+                    cfg = json.load(f)
+                break
+            except Exception:
+                cfg = {}
 
     langs = ["go", "dotnet", "python"] if args.lang == "all" else [args.lang]
     for i, lang in enumerate(langs, 1):

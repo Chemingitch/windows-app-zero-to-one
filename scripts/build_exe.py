@@ -19,7 +19,7 @@ import shutil
 import subprocess
 import sys
 
-DEFAULT_ROOT = os.path.join(os.path.expanduser("~"), ".windows-zero-to-one")
+DEFAULT_ROOT = os.path.join(os.path.expanduser("~"), ".windowsbuildtools")
 
 
 def log(msg):
@@ -49,7 +49,13 @@ def load_devchain():
     if v:
         roots.append(v)
     roots.append(DEFAULT_ROOT)
+    # legacy location kept for backward compatibility
+    roots.append(os.path.join(os.path.expanduser("~"), ".windows-zero-to-one"))
+    seen = set()
     for r in roots:
+        if r in seen:
+            continue
+        seen.add(r)
         p = os.path.join(r, "devchain.json")
         if os.path.isfile(p):
             try:
