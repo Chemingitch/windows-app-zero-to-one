@@ -1,0 +1,27 @@
+# Local toolchain + signature identity (never commit these)
+certs/
+*.jks
+*.pfx
+keystore.properties
+signing.properties
+toolchain.json
+devchain.json
+
+# Build output
+dist/
+build-py/
+build/
+out/
+*.apk
+*.idsig
+*.exe
+
+# Python
+__pycache__/
+*.egg-info/
+.venv/
+venv/
+
+# OS junk
+.DS_Store
+Thumbs.db
