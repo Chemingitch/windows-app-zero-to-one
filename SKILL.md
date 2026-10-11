@@ -37,7 +37,7 @@ agent_created: true
 
 核心原则：**先模仿其"形"（界面、图标、入口、布局），功能（必做 / 可选 / 不做）由开发者自己想，或你帮它大致推测里面有什么，再让开发者拍板。** 仿作是"做出同等体验的最小实现"，不是逐像素复刻。
 
-参照物有四种形态，取"形"的方式不同：
+参照物有五种形态，取"形"的方式不同：
 
 | 参照物 | 怎么"模仿其形" | 功能从哪来 |
 |---|---|---|
@@ -88,9 +88,24 @@ agent_created: true
 ```bash
 python scripts/setup_dev_chain.py --lang go            # ~70MB，13 秒
 python scripts/setup_dev_chain.py --lang dotnet        # ~200MB
-python scripts/setup_dev_chain.py --lang python        # 装 PyInstaller 到当前解释器
+python scripts/setup_dev_chain.py --lang python        # 下载独立 CPython 到 <root>/python 并装 PyInstaller
 python scripts/setup_dev_chain.py --proxy http://127.0.0.1:7890
 ```
+
+> `--lang python` 会**下载一份独立的 CPython** 到 `<root>/python`（默认 `~/.windowsbuildtools/python`），
+> 再往里 `pip install pyinstaller`。它**不污染你机器上已有的任何 Python**：本机没装 Python 也能用。
+> 若同版本 Python 已注册（WiX 拒绝装第二份），脚本自动从注册表/`AppData` 复用已装的，并装好 PyInstaller。
+
+**开发者已自带 Python + PyInstaller？先提醒再决定，不要静默下载。**
+进入 Python 路线前，先确认目标机器上是否已经有一套能用的环境：
+
+- 自动检测：`python -m PyInstaller --version` 能正常输出版本号，即视为已具备。
+- 若已具备，**主动提醒开发者**：技能默认会再下载一份「独立 CPython + PyInstaller」装到 `<root>/python`，
+  目的是**隔离现有环境、保证构建可复现、换机/团队一致**；但如果只是自用、环境已稳定，
+  **完全可以跳过下载**，直接用现有解释器跑 `build_exe.py`（脚本会自动用 `sys.executable` 作为构建 Python）。
+- 让开发者二选一，**不要替他默认下载**：
+  1. **用现有环境（不下载）** —— 直接 `python scripts/build_exe.py --src <project>`，省时省盘。
+  2. **仍装独立工具箱（隔离 / 可复现）** —— 跑 `setup_dev_chain.py --lang python`。
 
 装到 **`~/.windowsbuildtools`**（即"Windows 构建工具"目录，简称 windowsbuildtools），写 `devchain.json`；
 之后 `build_exe.py` / `sign_exe.py` **自动读取，无需参数**。
@@ -160,7 +175,7 @@ python scripts/sign_exe.py dist/MyApp.exe --name "Your Name"
 
 ## 资源
 
-- `scripts/setup_dev_chain.py` — 自动部署 Go / .NET / PyInstaller（空机器一键可用）
+- `scripts/setup_dev_chain.py` — 自动部署 Go / .NET / 独立 CPython+PyInstaller（空机器一键可用）
 - `scripts/build_exe.py` — 自动识别语言并构建单 exe
 - `scripts/sign_exe.py` — 生成个人证书 + Authenticode 签名 + 时间戳
 - `references/build-options.md` — 各形态构建命令、体积、取舍

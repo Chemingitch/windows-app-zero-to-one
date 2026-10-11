@@ -10,23 +10,36 @@ Usage:
 
   go      ~70 MB, unpack-and-run. Best for a single self-contained exe.
   dotnet  ~200 MB via the official install script. Best for real GUI apps.
-  python  reuses the current interpreter, installs PyInstaller into it.
+  python  downloads a standalone CPython into <root>/python, then installs
+          PyInstaller into it. No pre-existing Python needed.
 """
 
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
 import urllib.request
 import zipfile
 
+try:
+    import winreg
+except Exception:  # non-Windows guard (script still targets Windows exe builds)
+    winreg = None
+
 GO_VERSION_URL = "https://go.dev/VERSION?m=text"
 GO_FALLBACK = ["go1.22.5", "go1.21.11"]
 GO_DL = "https://dl.google.com/go/%s.windows-amd64.zip"
 DOTNET_INSTALL = "https://dot.net/v1/dotnet-install.ps1"
 DOTNET_CHANNEL = "8.0"
+
+# Standalone CPython for PyInstaller builds. Downloaded into <root>/python so the
+# user never has to pollute their own interpreter (mirrors how Go is deployed).
+PYTHON_FTP = "https://www.python.org/ftp/python/"
+PYTHON_ARCH = "amd64"
+PYTHON_VER_FALLBACK = ["3.13.16", "3.13.15", "3.12.15"]
 
 DEFAULT_ROOT = os.path.join(os.path.expanduser("~"), ".windowsbuildtools")
 
@@ -77,6 +90,110 @@ def fetch_text(url, proxy=None):
         return ""
 
 
+def windows_path(p):
+    """Convert a path (possibly MSYS /e/foo) to a native Windows path E:\\foo."""
+    p = os.path.expanduser(p)
+    if p.startswith("/") and len(p) >= 3 and p[1].isalpha() and p[2] == "/":
+        p = p[1].upper() + ":" + p[2:]
+    p = os.path.abspath(p)
+    return p.replace("/", "\\")
+
+
+def fetch_latest_python(proxy):
+    """Return the newest 3.13.x (else 3.12.x) CPython version from python.org."""
+    html = fetch_text(PYTHON_FTP, proxy)
+    for minor in (13, 12):
+        cands = sorted(
+            {v for v in re.findall(r"3\.%d\.\d+" % minor, html)},
+            key=lambda s: [int(x) for x in s.split(".")],
+        )
+        if cands:
+            return cands[-1]
+    return None
+
+
+def find_installed_python():
+    """Locate an already-installed CPython 3.13/3.12 (registry or default paths).
+
+    Used as a fallback when the silent installer refuses to drop a second copy
+    of the same version into <root>/python (WiX sees it as already installed).
+    """
+    cands = []
+    if winreg is not None:
+        for hive in (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE):
+            for key in (r"Software\Python\PythonCore\3.13\InstallPath",
+                        r"Software\Python\PythonCore\3.12\InstallPath"):
+                try:
+                    with winreg.OpenKey(hive, key) as k:
+                        val = winreg.QueryValue(k, "")
+                        if val:
+                            cands.append(os.path.join(val, "python.exe"))
+                except Exception:
+                    pass
+    base = os.path.expanduser("~")
+    for v in ("313", "312"):
+        cands.append(os.path.join(base, "AppData", "Local", "Programs",
+                                   "Python", "Python" + v, "python.exe"))
+        cands.append(os.path.join("C:\\Program Files", "Python" + v, "python.exe"))
+    for c in cands:
+        if os.path.isfile(c):
+            return c
+    return None
+
+
+def setup_python(root, proxy):
+    py_home = os.path.join(root, "python")
+    py_exe = windows_path(os.path.join(py_home, "python.exe"))
+    if os.path.isfile(py_exe):
+        log("  already present: %s" % py_exe)
+    else:
+        os.makedirs(windows_path(root), exist_ok=True)
+        ver = fetch_latest_python(proxy) or PYTHON_VER_FALLBACK[0]
+        log("  Python version: %s" % ver)
+        url = "%s%s/python-%s-%s.exe" % (PYTHON_FTP, ver, ver, PYTHON_ARCH)
+        tmp = os.path.join(tempfile.mkdtemp(), "python-%s.exe" % ver)
+        ok, err = download(url, tmp, proxy, "python-%s" % ver)
+        if not ok:
+            fail("could not download Python %s: %s" % (ver, err))
+        target = windows_path(py_home)
+        log("  installing to %s" % target)
+        proc = subprocess.run(
+            [tmp, "/quiet", "InstallAllUsers=0", "TargetDir=" + target,
+             "Include_pip=1", "Include_launcher=0", "Include_test=0",
+             "Include_dev=1", "PrependPath=0", "Shortcuts=0",
+             "AssociateFiles=0", "CompileAll=0"],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        out = proc.stdout.decode("utf-8", "replace")
+        try:
+            os.remove(tmp)
+        except Exception:
+            pass
+        if not os.path.isfile(py_exe):
+            # WiX won't install a 2nd copy of an already-registered version;
+            # reuse the existing install instead of hard-failing.
+            existing = find_installed_python()
+            if existing:
+                log("  Python %s already installed elsewhere; reusing it" % ver)
+                py_exe = windows_path(existing)
+            else:
+                print(out[-2000:])
+                fail("Python install failed (use --dir pointing at a local "
+                     "path, not a network share)")
+    env = dict(os.environ)
+    if proxy:
+        env["https_proxy"] = proxy
+        env["http_proxy"] = proxy
+    proc = subprocess.run([py_exe, "-m", "pip", "install", "--upgrade",
+                           "pip", "pyinstaller"],
+                          stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env)
+    out = proc.stdout.decode("utf-8", "replace")
+    if proc.returncode != 0:
+        print(out[-2000:])
+        fail("pip install pyinstaller failed (try adding --proxy)")
+    log("  pyinstaller ready: %s" % py_exe)
+    return py_exe
+
+
 def setup_go(root, proxy):
     go_home = os.path.join(root, "go")
     go_exe = os.path.join(go_home, "bin", "go.exe")
@@ -123,21 +240,6 @@ def setup_dotnet(root, proxy):
     return dotnet_home
 
 
-def setup_python(root):
-    py = sys.executable
-    if not py:
-        fail("no python interpreter found")
-    log("  interpreter: %s" % py)
-    proc = subprocess.run([py, "-m", "pip", "install", "--upgrade", "pyinstaller"],
-                          stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    out = proc.stdout.decode("utf-8", "replace")
-    if proc.returncode != 0:
-        print(out[-2000:])
-        fail("pip install pyinstaller failed (try adding --proxy and re-running)")
-    log("  pyinstaller ready")
-    return py
-
-
 def main():
     ap = argparse.ArgumentParser(description="Bootstrap a Windows exe toolchain.")
     ap.add_argument("--lang", choices=["go", "dotnet", "python", "all"], default="go",
@@ -147,7 +249,7 @@ def main():
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
 
-    root = os.path.abspath(args.dir or os.environ.get("WINDOWS_TOOLS_ROOT") or DEFAULT_ROOT)
+    root = windows_path(args.dir or os.environ.get("WINDOWS_TOOLS_ROOT") or DEFAULT_ROOT)
     log("=" * 58)
     log(" Windows exe toolchain bootstrap")
     log("  lang = %s" % args.lang)
@@ -178,7 +280,7 @@ def main():
         elif lang == "dotnet":
             cfg["dotnet"] = setup_dotnet(root, args.proxy)
         else:
-            cfg["python"] = setup_python(root)
+            cfg["python"] = setup_python(root, args.proxy)
 
     os.makedirs(root, exist_ok=True)
     with open(os.path.join(root, "devchain.json"), "w", encoding="utf-8") as f:

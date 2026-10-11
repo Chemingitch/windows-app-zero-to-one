@@ -15,9 +15,11 @@
 # 1. 复制最小骨架
 cp -r assets/starter-go myapp
 
-# 2. 准备工具链（空机器第一次；go 约 13 秒 / .NET 约 48 秒）
+# 2. 准备工具链（空机器第一次；go 约 13 秒 / .NET 约 48 秒 / python 约 1 分钟）
 python scripts/setup_dev_chain.py --lang go            # 命令行程序首选
 python scripts/setup_dev_chain.py --lang dotnet        # 真正的窗口程序
+python scripts/setup_dev_chain.py --lang python        # 下载独立 CPython+PyInstaller（不污染本机 Python）
+# 若本机已有可用的 Python + PyInstaller，可跳过上面这行，直接跑 build_exe.py（用现有解释器）
 
 # 3. 构建（自动识别 go.mod / *.csproj / *.py）
 python scripts/build_exe.py --src myapp --out myapp.exe
@@ -72,7 +74,7 @@ python scripts/sign_exe.py myapp.exe --name "Your Name"
 
 ```
 SKILL.md                      六阶段工作流 + 签名专节
-scripts/setup_dev_chain.py    自动部署 Go / .NET / PyInstaller
+scripts/setup_dev_chain.py    自动部署 Go / .NET / 独立 CPython+PyInstaller
 scripts/build_exe.py           自动识别语言并构建单 exe
 scripts/sign_exe.py            生成个人证书 + Authenticode 签名 + 时间戳
 references/                    构建选项 / 签名与 SmartScreen / 踩坑
